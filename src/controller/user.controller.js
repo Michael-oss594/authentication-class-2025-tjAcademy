@@ -89,7 +89,7 @@ const forgetPassword = async (req, res) => {
         }
                 const otp = Math.floor(100000 + Math.random() * 900000).toString();
                 user.otp = otp;
-                user.otpExpiry = Date.now() + 20 * 60 * 1000;
+                user.otpExpiry = Date.now() + 40 * 60 * 1000;
                 await user.save();
 
                 // build reset link for frontend (optional)
