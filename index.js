@@ -8,6 +8,7 @@ const port = process.env.PORT || 4000;
 
 
 const userRoutes = require('./src/routes/user.routes');
+const walletRoutes = require('./src/routes/user.wallets.routes');
 
 app.use(express.json());
 app.use(morgan('dev'));
@@ -20,8 +21,12 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/users', userRoutes);
+app.use('/api/wallets', walletRoutes);
 
 
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
 });
+
+
+
