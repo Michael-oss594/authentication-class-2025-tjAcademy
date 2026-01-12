@@ -2,6 +2,7 @@ const User = require("../models/user.models");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const emailService = require("../utils/emailService.js");
+const cloudinary = require("../config/cloudinary.js");
 
 
 
@@ -207,5 +208,30 @@ const getAllUsers = async (req, res) => {
   }
 };
 
+// Upload Profile Picture
+const uploadProfilePicture = async (req, res) => {
+const userId = req.user._id;
+try {
+    if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+    }
+    const userData = await User.findById(userId);
+    if (!userData) {
+        return res.status(400).json({ message: "User not found"});
+    }
+    const uploadResults = await cloudinary.uploader.upload(req.file.path, {
+        folder: "profile_pictures",
+        public_id: `user_${userId}_profile`,
+    });
 
-module.exports = { signup, login, forgetPassword, resetPassword, verifyOtp, resendOtp, getAllUsers };
+    userData.profilePicture = uploadResults.secure_url;
+    await userData.save();
+
+    return res.status(200).json({ message: "Profile picture uploaded successfully" });
+} catch (error) {
+    console.error("Error uploading profile picture:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+}        
+};
+
+module.exports = { signup, login, forgetPassword, resetPassword, verifyOtp, resendOtp, getAllUsers, uploadProfilePicture };
