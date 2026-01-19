@@ -226,18 +226,18 @@ const createRedirectUrl = async (req, res) => {
 
 
 const flutterwaveWebhook = async (req, res) => {
+    console.log("🔥 WEBHOOK HIT 🔥", JSON.stringify(req.body, null, 2));
+
     try {
         const secretHash = process.env.FLW_SECRET_HASH;
         const signature = req.headers['verif-hash'];
 
-        // 1️⃣ Verify webhook signature
         if (!signature || signature !== secretHash) {
             return res.status(401).json({ message: "Invalid webhook signature" });
         }
 
         const payload = req.body;
 
-        // 2️⃣ Only process successful payments
         if (
             payload.event !== "charge.completed" ||
             payload.data.status !== "successful"
@@ -253,36 +253,35 @@ const flutterwaveWebhook = async (req, res) => {
             id: flutterwaveTransactionId
         } = payload.data;
 
-        // 3️⃣ Prevent duplicate funding
-        const existingTransaction = await Transaction.findOne({
-            flutterwaveTransactionId
-        });
-
-        if (existingTransaction) {
-            return res.status(200).json({ message: "Transaction already processed" });
+        // 1️⃣ Prevent duplicate funding
+        const existingTx = await Transaction.findOne({ flutterwaveTransactionId });
+        if (existingTx) {
+            return res.status(200).json({ message: "Already processed" });
         }
 
-        // 4️⃣ Find user by email
+        // 2️⃣ Find user
         const user = await User.findOne({ email: customer.email });
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
 
-        // 5️⃣ Find user's wallet
-        const wallet = await UserWallet.findOne({
-            userId: user._id,
-            currency
-        });
+        // 3️⃣ ATOMIC WALLET FUNDING ✅
+        const wallet = await UserWallet.findOneAndUpdate(
+            { userId: user._id, currency },
+            {
+                $setOnInsert: {
+                    userId: user._id,
+                    currency,
+                    accountNumber: customer.phonenumber || null
+                },
+                $inc: {
+                    balance: Number(amount)
+                }
+            },
+            { new: true, upsert: true }
+        );
 
-        if (!wallet) {
-            return res.status(404).json({ message: "Wallet not found" });
-        }
-
-        // 6️⃣ Credit wallet (atomic)
-        wallet.balance += Number(amount);
-        await wallet.save();
-
-        // 7️⃣ Log transaction
+        // 4️⃣ LOG TRANSACTION
         await Transaction.create({
             userId: user._id,
             walletId: wallet._id,
@@ -295,7 +294,9 @@ const flutterwaveWebhook = async (req, res) => {
             description: "Wallet funding via Flutterwave"
         });
 
-        return res.status(200).json({ message: "Wallet funded successfully" });
+        return res.status(200).json({
+            message: "Wallet funded successfully"
+        });
 
     } catch (error) {
         console.error("Webhook Error:", error);
