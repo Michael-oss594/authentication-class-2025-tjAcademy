@@ -18,7 +18,7 @@ referenceNumber: {
 },
 type: {
     type: String,
-    enum: ('credit', 'debit', 'transfer'),
+    enum: ['credit', 'debit', 'transfer'],
     require: true
 },
 amount: {
@@ -44,7 +44,7 @@ description: {
 },
 status: {
     type: String,
-    enum: ('pending', 'completed', 'failed'),
+    enum: ['pending', 'completed', 'failed'],
     default: 'pending'
 },
 

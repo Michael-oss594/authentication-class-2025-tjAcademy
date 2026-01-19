@@ -13,6 +13,8 @@ const walletRoutes = require('./src/routes/user.wallets.routes');
 app.use(express.json());
 app.use(morgan('dev'));
 
+app.use(express.urlencoded({ extended: true }));
+
 
 connectDB();
 
