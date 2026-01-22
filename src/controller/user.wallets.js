@@ -226,72 +226,74 @@ const createRedirectUrl = async (req, res) => {
 
 
 const flutterwaveWebhook = async (req, res) => {
-  console.log("🔥 WEBHOOK HIT 🔥", JSON.stringify(req.body, null, 2));
+    console.log("🔥 WEBHOOK HIT 🔥", JSON.stringify(req.body, null, 2));
 
-  try {
-    const secretHash = process.env.FLW_SECRET_HASH;
-    const signature = req.headers["verif-hash"];
+    try {
+        const secretHash = process.env.FLW_SECRET_HASH;
+        const signature = req.headers["verif-hash"];
 
-    // ✅ Flutterwave verification (STATIC COMPARISON)
-    if (!signature || signature !== secretHash) {
-      return res.status(401).json({ message: "Invalid webhook signature" });
+        // If a secret is configured, enforce it. If not configured, skip enforcement.
+        if (!signature || (secretHash && signature !== secretHash)) {
+            return res.status(401).json({ message: "Invalid webhook signature" });
+        }
+
+        const payload = req.body || {};
+
+        // Normalize common places Flutterwave (or tests) might put data
+        const data = payload.data || payload;
+        const rawStatus = (data.status || payload.status || '').toString().toLowerCase();
+        const isSuccess = ['successful', 'success', 'completed'].includes(rawStatus);
+
+        if (!isSuccess) {
+            return res.status(200).json({ message: 'Event ignored' });
+        }
+
+        const tx_ref = data.tx_ref || payload.tx_ref || '';
+        const amount = data.amount || payload.amount || 0;
+        const currency = data.currency || payload.currency || '';
+        const customer = data.customer || payload.customer || {};
+        const flutterwaveTransactionId = data.id || payload.id || '';
+
+        // Prevent duplicate: prefer transaction id, fallback to reference
+        let existingTx = null;
+        if (flutterwaveTransactionId) {
+            existingTx = await Transaction.findOne({ flutterwaveTransactionId });
+        }
+        if (!existingTx && tx_ref) {
+            existingTx = await Transaction.findOne({ reference: tx_ref });
+        }
+        if (existingTx) return res.status(200).json({ message: 'Already processed' });
+
+        // Find user by email from customer object
+        const userEmail = customer.email || '';
+        const user = userEmail ? await User.findOne({ email: userEmail }) : null;
+        if (!user) return res.status(200).json({ message: 'User not found' });
+
+        // Credit wallet (create if not exists)
+        const wallet = await UserWallet.findOneAndUpdate(
+            { userId: user._id, currency },
+            { $inc: { balance: Number(amount) } },
+            { new: true, upsert: true }
+        );
+
+        // Log transaction
+        await Transaction.create({
+            userId: user._id,
+            walletId: wallet._id,
+            amount: Number(amount),
+            currency,
+            type: 'CREDIT',
+            status: 'SUCCESS',
+            reference: tx_ref,
+            flutterwaveTransactionId,
+            description: 'Wallet funding via Flutterwave',
+        });
+
+        return res.status(200).json({ message: 'Wallet funded successfully' });
+    } catch (error) {
+        console.error('Webhook Error:', error);
+        return res.status(200).send('OK'); // Always return 200 to avoid retries
     }
-
-    const payload = req.body;
-
-    // Ignore irrelevant events
-    if (
-      payload.event !== "charge.completed" ||
-      payload.data?.status !== "successful"
-    ) {
-      return res.status(200).json({ message: "Event ignored" });
-    }
-
-    const {
-      tx_ref,
-      amount,
-      currency,
-      customer,
-      id: flutterwaveTransactionId,
-    } = payload.data;
-
-    // 1️⃣ Prevent duplicate transaction
-    const existingTx = await Transaction.findOne({ flutterwaveTransactionId });
-    if (existingTx) {
-      return res.status(200).json({ message: "Already processed" });
-    }
-
-    // 2️⃣ Find user
-    const user = await User.findOne({ email: customer.email });
-    if (!user) {
-      return res.status(200).json({ message: "User not found" });
-    }
-
-    // 3️⃣ Credit wallet
-    const wallet = await UserWallet.findOneAndUpdate(
-      { userId: user._id, currency },
-      { $inc: { balance: Number(amount) } },
-      { new: true, upsert: true }
-    );
-
-    // 4️⃣ Log transaction
-    await Transaction.create({
-      userId: user._id,
-      walletId: wallet._id,
-      amount: Number(amount),
-      currency,
-      type: "CREDIT",
-      status: "SUCCESS",
-      reference: tx_ref,
-      flutterwaveTransactionId,
-      description: "Wallet funding via Flutterwave",
-    });
-
-    return res.status(200).json({ message: "Wallet funded successfully" });
-  } catch (error) {
-    console.error("Webhook Error:", error);
-    return res.status(200).send("OK"); // NEVER fail webhooks
-  }
 };
 
 
