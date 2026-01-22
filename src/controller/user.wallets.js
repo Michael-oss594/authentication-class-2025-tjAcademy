@@ -297,6 +297,15 @@ const flutterwaveWebhook = async (req, res) => {
 };
 
 
+const flutterwaveWebhookDeprecated = async (req, res) => {
+  // This function has been moved to src/controller/webhook.controller.js
+  // Use the new webhook endpoint: POST /api/webhooks/flutterwave
+  res.status(410).json({ 
+    message: 'Endpoint moved',
+    newEndpoint: '/api/webhooks/flutterwave'
+  });
+};
+
    
 module.exports = { 
     createWallet, 

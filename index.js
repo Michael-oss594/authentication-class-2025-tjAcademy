@@ -8,9 +8,7 @@ const port = process.env.PORT || 4000;
 
 const userRoutes = require('./src/routes/user.routes');
 const walletRoutes = require('./src/routes/user.wallets.routes');
-
-// Middleware for Flutterwave webhook (raw body)
-app.post('/api/wallets/webhooks/flutterwave', express.raw({type: 'application/json'}), walletRoutes);
+const webhookRoutes = require('./src/routes/webhook.routes');
 
 app.use(express.json());
 app.use(morgan('dev'));
@@ -24,6 +22,7 @@ app.get('/', (req, res) => {
 
 app.use('/api/users', userRoutes);
 app.use('/api/wallets', walletRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
